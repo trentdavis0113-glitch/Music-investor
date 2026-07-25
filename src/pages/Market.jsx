@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase, fmt } from '../lib/supabase'
+import { supabase, fmt, money } from '../lib/supabase'
 import { useMarket, refreshMarket } from '../lib/market'
 import Sparkline from '../components/Sparkline'
 import Avatar from '../components/Avatar'
@@ -199,10 +199,12 @@ export default function Market() {
                 className="flex items-center justify-between px-4 py-2.5 hover:bg-edge/40">
                 <span className="text-sm font-medium">{a.name}</span>
                 <span className="num text-sm">
-                  ${fmt(a.latest)}{' '}
-                  <span className={a.pct >= 0 ? 'text-gain' : 'text-loss'}>
-                    {a.pct >= 0 ? '+' : ''}{a.pct.toFixed(2)}%
-                  </span>
+                  {money(a.latest)}{' '}
+                  {a.latest != null && a.pct != null && (
+                    <span className={a.pct >= 0 ? 'text-gain' : 'text-loss'}>
+                      {a.pct >= 0 ? '+' : ''}{a.pct.toFixed(2)}%
+                    </span>
+                  )}
                 </span>
               </Link>
             ))}
@@ -333,11 +335,15 @@ function ArtistRow({ a }) {
       </div>
 
       <div className="w-[5.5rem] shrink-0 text-right">
-        <p className="num text-[15px] font-semibold leading-tight text-paper">${fmt(a.latest)}</p>
-        <p className={`num mt-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-          a.pct >= 0 ? 'bg-gain/12 text-gain' : 'bg-loss/12 text-loss'}`}>
-          {a.pct >= 0 ? '+' : ''}{a.pct.toFixed(2)}%
-        </p>
+        <p className="num text-[15px] font-semibold leading-tight text-paper">{money(a.latest)}</p>
+        {a.latest != null && a.pct != null ? (
+          <p className={`num mt-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+            a.pct >= 0 ? 'bg-gain/12 text-gain' : 'bg-loss/12 text-loss'}`}>
+            {a.pct >= 0 ? '+' : ''}{a.pct.toFixed(2)}%
+          </p>
+        ) : (
+          <p className="mt-1 text-[11px] text-mute">no price</p>
+        )}
       </div>
     </Link>
   )

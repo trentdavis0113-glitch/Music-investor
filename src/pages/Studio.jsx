@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { LineChart, Line, YAxis, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { supabase, fmt, dayChange } from '../lib/supabase'
+import { supabase, fmt, money, dayChange } from '../lib/supabase'
 import { useSession } from '../App'
 
 export default function Studio() {
@@ -79,11 +79,12 @@ export default function Studio() {
               </Link>
             </div>
             <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-              <Stat label="Share price" value={a.latest ? `$${fmt(a.latest)}` : '—'} />
-              <Stat label="Today" value={`${a.pct >= 0 ? '+' : ''}${a.pct.toFixed(2)}%`}
+              <Stat label="Share price" value={money(a.latest)} />
+              <Stat label="Today" value={a.latest != null && a.pct != null
+                  ? `${a.pct >= 0 ? '+' : ''}${a.pct.toFixed(2)}%` : '—'}
                 tone={a.pct >= 0 ? 'text-gain' : 'text-loss'} />
               <Stat label="Holders" value={a.holders} />
-              <Stat label="Fan investment" value={`$${fmt(cap)}`} />
+              <Stat label="Fan investment" value={money(cap)} />
             </div>
             {a.growth.length >= 2 && (
               <div className="rounded-xl border border-edge bg-panel p-4">

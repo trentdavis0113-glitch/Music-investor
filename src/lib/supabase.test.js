@@ -1,5 +1,24 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { callFunction } from './supabase'
+import { callFunction, fmt, money } from './supabase'
+
+describe('fmt / money never invent a number', () => {
+  // Regression guard. `Number(null)` is 0, so an artist with no recorded price used to
+  // render a confident "$0.00" in the ticker, the market list and the artist header.
+  it('renders absent values as an em dash, not zero', () => {
+    for (const v of [null, undefined, '', NaN, 'abc']) {
+      expect(fmt(v)).toBe('—')
+      expect(money(v)).toBe('—')
+    }
+  })
+
+  it('still formats real numbers, including zero', () => {
+    expect(fmt(0)).toBe('0.00')
+    expect(money(0)).toBe('$0.00')
+    expect(fmt(1234.5)).toBe('1,234.50')
+    expect(money(9804)).toBe('$9,804.00')
+    expect(money('24.5')).toBe('$24.50')
+  })
+})
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {

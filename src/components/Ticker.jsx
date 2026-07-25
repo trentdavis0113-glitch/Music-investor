@@ -1,4 +1,4 @@
-import { fmt } from '../lib/supabase'
+import { money } from '../lib/supabase'
 import { useMarket } from '../lib/market'
 
 /**
@@ -18,10 +18,14 @@ export default function Ticker() {
         {row.map((i, idx) => (
           <span key={idx} className="num flex items-center gap-2 text-xs whitespace-nowrap">
             <span className="text-fog">${i.symbol}</span>
-            <span>${fmt(i.latest)}</span>
-            <span className={i.pct >= 0 ? 'text-gain' : 'text-loss'}>
-              {i.pct >= 0 ? '▲' : '▼'} {Math.abs(i.pct).toFixed(2)}%
-            </span>
+            <span>{money(i.latest)}</span>
+            {/* An artist with no recorded price has no day change either — showing
+                "▲ 0.00%" would state a fact the data does not support. */}
+            {i.latest != null && i.pct != null && (
+              <span className={i.pct >= 0 ? 'text-gain' : 'text-loss'}>
+                {i.pct >= 0 ? '▲' : '▼'} {Math.abs(i.pct).toFixed(2)}%
+              </span>
+            )}
           </span>
         ))}
       </div>

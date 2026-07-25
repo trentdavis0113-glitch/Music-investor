@@ -10,8 +10,24 @@ export const SUPABASE_KEY =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+/**
+ * Format a number to two decimal places.
+ *
+ * Returns an em dash rather than a figure when the value is absent. It used to run
+ * `Number(n)`, which turns null and undefined into 0 — so an artist with no recorded
+ * price rendered as a confident "$0.00" everywhere it appeared, including the ticker.
+ * Missing data now looks missing.
+ */
 export function fmt(n) {
-  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const v = Number(n)
+  if (n == null || n === '' || !Number.isFinite(v)) return '—'
+  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** `fmt` with the currency symbol attached, so an unknown amount reads "—" and not "$—". */
+export function money(n) {
+  const s = fmt(n)
+  return s === '—' ? s : `$${s}`
 }
 
 export function dayChange(ticks) {
