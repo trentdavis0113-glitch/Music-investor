@@ -28,10 +28,21 @@ export function dayChange(ticks) {
  * Call a Supabase Edge Function with a hard timeout and bounded retries.
  *
  * A bare fetch() has no timeout, so a hung request left the signup button stuck on
- * "Working…" forever. Retries cover transient 5xx/429/network blips only — 4xx responses
- * are terminal and return immediately so we never double-submit a signup.
+ * "Working…" forever. Retries cover transient 5xx/429/connection blips only — 4xx
+ * responses are terminal and return immediately.
+ *
+ * retryOnTimeout defaults to false because these calls are not idempotent: a request
+ * that timed out may already have been processed server-side, and retrying it would
+ * submit twice. A connection that never opened is safe to retry; a silent timeout is not.
+ *
+ * The key goes on `apikey`, never `Authorization: Bearer`. Publishable (sb_publishable_*)
+ * keys are not JWTs, and Supabase's gateway rejects them as "Invalid JWT" if bearer-sent.
  */
-export async function callFunction(name, body, { timeoutMs = 15000, retries = 2 } = {}) {
+export async function callFunction(
+  name,
+  body,
+  { timeoutMs = 15000, retries = 2, retryOnTimeout = false } = {},
+) {
   let lastErr = null
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -43,7 +54,6 @@ export async function callFunction(name, body, { timeoutMs = 15000, retries = 2 
         headers: {
           'Content-Type': 'application/json',
           apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
         },
         body: JSON.stringify(body),
         signal: ctrl.signal,
@@ -63,9 +73,12 @@ export async function callFunction(name, body, { timeoutMs = 15000, retries = 2 
       if (res.status < 500 && res.status !== 429) return { data: null, error: err }
       lastErr = err
     } catch (e) {
-      lastErr = e?.name === 'AbortError'
+      const timedOut = e?.name === 'AbortError'
+      lastErr = timedOut
         ? { message: 'That took too long. Check your connection and try again.', code: 'timeout' }
         : { message: 'Network error. Check your connection and try again.', code: 'network' }
+      // The server may already have processed a timed-out request — don't send it twice.
+      if (timedOut && !retryOnTimeout) return { data: null, error: lastErr }
     } finally {
       clearTimeout(timer)
     }
