@@ -173,12 +173,20 @@ export default function Auth() {
 
   return (
     <div className="mx-auto max-w-sm space-y-4">
-      <h1 className="font-display text-2xl font-extrabold">
-        {mode === 'signin' ? 'Sign in' : 'Create account'}
-      </h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="font-display text-2xl font-extrabold">
+          {mode === 'signin' ? 'Sign in' : 'Create account'}
+        </h1>
+        <span className="rounded-full border border-stage/50 bg-stage/10 px-2 py-0.5 text-[11px] font-semibold text-stage">
+          Private Columbus Beta
+        </span>
+      </div>
       <p className="text-sm text-fog">
-        Every trader starts Season 1 with $10,000 in simulated cash. No real money is involved.{' '}
+        Every trader starts Season 1 with $10,000 in <span className="text-paper">simulated cash</span>.
+        No real money, no deposits, no securities, and nothing to buy.{' '}
         <Link to="/how-it-works" className="text-stage underline underline-offset-4">How it works</Link>
+        {' · '}
+        <Link to="/terms" className="text-stage underline underline-offset-4">Terms</Link>
       </p>
 
       <button onClick={google}
@@ -214,10 +222,15 @@ export default function Auth() {
             aria-label="Password"
             value={password} onChange={e => setPassword(e.target.value)} />
           <button type="button" onClick={() => setShowPw(s => !s)}
+            aria-label={showPw ? 'Hide password' : 'Show password'}
             className="absolute inset-y-0 right-0 px-3 text-xs text-fog hover:text-paper">
             {showPw ? 'Hide' : 'Show'}
           </button>
         </div>
+        {/* Stated persistently, not only as placeholder text that vanishes on first keystroke. */}
+        {mode === 'signup' && (
+          <p className="-mt-2 text-xs text-fog">Use at least 8 characters.</p>
+        )}
 
         <p aria-live="polite" role="status">
           {err && <span className="text-sm text-loss">{err}</span>}

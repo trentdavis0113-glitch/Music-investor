@@ -14,6 +14,7 @@ import ResetPassword from './pages/ResetPassword'
 import HowItWorks from './pages/HowItWorks'
 import Trader from './pages/Trader'
 import NotFound from './pages/NotFound'
+import Terms from './pages/Terms'
 import ErrorBoundary from './components/ErrorBoundary'
 
 const SessionCtx = createContext(null)
@@ -117,6 +118,7 @@ export default function App() {
               <Route path="/reset" element={<ResetPassword />} />
               <Route path="/how-it-works" element={<HowItWorks />} />
               <Route path="/trader/:username" element={<Trader />} />
+              <Route path="/terms" element={<Terms />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             </ErrorBoundary>
