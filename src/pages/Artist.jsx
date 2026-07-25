@@ -77,15 +77,20 @@ export default function Artist() {
       + Math.min(Math.sqrt(Math.max(metrics.followers, 0)) / 100, 25)
   }, [metrics])
 
+  // Keep real timestamps rather than pre-formatted strings, so the axis can space ticks
+  // by actual elapsed time instead of by row index.
   const chartData = useMemo(() => {
     const cutoff = Date.now() - RANGES[range] * 86400_000
     return ticks
       .filter(t => new Date(t.ts).getTime() >= cutoff)
-      .map(t => ({
-        ts: new Date(t.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' }),
-        price: Number(t.price)
-      }))
+      .map(t => ({ t: new Date(t.ts).getTime(), price: Number(t.price) }))
   }, [ticks, range])
+
+  const axisFormat = useMemo(() => (
+    range === '1D'
+      ? v => new Date(v).toLocaleTimeString([], { hour: 'numeric' })
+      : v => new Date(v).toLocaleDateString([], { month: 'short', day: 'numeric' })
+  ), [range])
 
   const heldShares = holding ? Number(holding.shares) : 0
   const positionPl = holding && latest ? (latest - Number(holding.avg_cost)) * heldShares : 0
@@ -198,14 +203,21 @@ export default function Artist() {
         </div>
         <div className="h-64 rounded-xl border border-edge bg-panel p-3">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <XAxis dataKey="ts" hide />
+            <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+              {/* Was hidden entirely, leaving the line with no time context at all. */}
+              <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
+                tickFormatter={axisFormat} minTickGap={44} height={20}
+                tick={{ fill: '#9A9DB3', fontSize: 10, fontFamily: 'JetBrains Mono' }}
+                axisLine={false} tickLine={false} />
               <YAxis domain={['auto', 'auto']} width={52}
                 tick={{ fill: '#9A9DB3', fontSize: 11, fontFamily: 'JetBrains Mono' }}
                 tickFormatter={v => `$${v.toFixed(2)}`} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{ background: '#1B1D29', border: '1px solid #2A2D3E', borderRadius: 8 }}
                 labelStyle={{ color: '#9A9DB3', fontSize: 12 }}
+                labelFormatter={v => new Date(v).toLocaleString([], {
+                  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                })}
                 formatter={v => [`$${fmt(v)}`, 'Price']} />
               {fairValue && (
                 <ReferenceLine y={fairValue} stroke="#8B7CF6" strokeDasharray="4 4"

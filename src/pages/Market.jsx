@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase, fmt, dayChange } from '../lib/supabase'
+import { supabase, fmt } from '../lib/supabase'
+import { useMarket, refreshMarket } from '../lib/market'
 import Sparkline from '../components/Sparkline'
 import HowStrip from '../components/HowStrip'
 import PulseBar from '../components/PulseBar'
@@ -43,7 +44,6 @@ function RequestArtist({ session }) {
 
 export default function Market() {
   const session = useSession()
-  const [rows, setRows] = useState(null)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState('movers')
   const [watchIds, setWatchIds] = useState([])
@@ -53,50 +53,19 @@ export default function Market() {
   const [pred, setPred] = useState(null)
   const [pickId, setPickId] = useState('')
   const [predMsg, setPredMsg] = useState(null)
-  const [err, setErr] = useState(null)
 
-  const load = useCallback(async () => {
-      const { data: artists, error: aErr } = await supabase
-        .from('artists').select('id,name,genre,image_url,symbol,metrics_verified').eq('is_active', true)
-      // A failed fetch used to fall through to setRows([]), which rendered
-      // "No artists listed yet." — indistinguishable from a genuinely empty market.
-      if (aErr) { setErr(aErr.message || 'Request failed.'); return }
-      if (!artists) { setRows([]); return }
-      const since = new Date(); since.setDate(since.getDate() - 2)
-      const { data: ticks } = await supabase
-        .from('price_ticks').select('artist_id,price,ts')
-        .gte('ts', since.toISOString()).order('ts', { ascending: true })
-      const { data: snaps } = await supabase
-        .from('metric_snapshots').select('artist_id,popularity,followers,captured_at')
-        .order('captured_at', { ascending: false }).limit(300)
-      const fv = {}
-      for (const m of snaps || []) {
-        if (!(m.artist_id in fv)) {
-          fv[m.artist_id] = 1 + (m.popularity / 100) * 49
-            + Math.min(Math.sqrt(Math.max(m.followers, 0)) / 100, 25)
-        }
-      }
-      const byArtist = {}
-      for (const t of ticks || []) (byArtist[t.artist_id] ||= []).push(t)
-      setRows(artists.map(a => {
-        const series = byArtist[a.id] || []
-        const { pct, latest } = dayChange(series)
-        const gap = latest && fv[a.id] ? ((fv[a.id] - latest) / latest) * 100 : null
-        return { ...a, pct, latest, gap, spark: series.slice(-40).map(t => Number(t.price)) }
-      }).filter(r => r.latest != null))
-      setErr(null)
-      supabase.rpc('recent_activity').then(({ data }) => setActivity(data || []))
-      supabase.from('market_posts').select('title,body').order('id', { ascending: false })
-        .limit(1).maybeSingle().then(({ data }) => setRecap(data))
-      supabase.from('feature_flags').select('enabled').eq('key', 'predictions')
-        .maybeSingle().then(({ data }) => setPredEnabled(!!data?.enabled))
-  }, [])
+  // Prices, day change, fair-value gap and sparklines all arrive pre-aggregated from
+  // market_overview(), shared with the Ticker so the page makes one request, not two.
+  const { rows, error: err, loading } = useMarket()
 
   useEffect(() => {
-    load()
-    const iv = setInterval(load, 60_000)
-    return () => clearInterval(iv)
-  }, [load])
+    // Slow-moving page furniture: fetched once, not on every price tick.
+    supabase.rpc('recent_activity').then(({ data }) => setActivity(data || []))
+    supabase.from('market_posts').select('title,body').order('id', { ascending: false })
+      .limit(1).maybeSingle().then(({ data }) => setRecap(data))
+    supabase.from('feature_flags').select('enabled').eq('key', 'predictions')
+      .maybeSingle().then(({ data }) => setPredEnabled(!!data?.enabled))
+  }, [])
 
   useEffect(() => {
     if (!session) { setWatchIds([]); setPred(null); return }
@@ -129,7 +98,7 @@ export default function Market() {
   }, [rows, q, sort])
 
   if (err && rows === null) return (
-    <ErrorState message="Couldn't load the market." onRetry={() => { setErr(null); load() }}>
+    <ErrorState message="Couldn't load the market." onRetry={refreshMarket}>
       {err}
     </ErrorState>
   )
@@ -232,13 +201,31 @@ export default function Market() {
         </section>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search artists or genres"
-          className="min-w-0 flex-1 rounded-lg border border-edge bg-panel px-3 py-2 text-sm outline-none focus:border-stage" />
-        <div className="flex gap-1">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <input value={q} onChange={e => setQ(e.target.value)} type="search"
+              aria-label="Search artists or genres" placeholder="Search artists or genres"
+              className="w-full rounded-lg border border-edge bg-panel px-3 py-2.5 pr-9 text-sm outline-none focus:border-stage" />
+            {q && (
+              <button onClick={() => setQ('')} aria-label="Clear search"
+                className="absolute inset-y-0 right-0 px-3 text-fog hover:text-paper">×</button>
+            )}
+          </div>
+          <button onClick={refreshMarket} disabled={loading}
+            title="Refresh prices" aria-label="Refresh prices"
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-edge bg-panel text-fog hover:border-stage hover:text-paper disabled:opacity-50">
+            <span aria-hidden="true" className={loading ? 'inline-block animate-spin' : ''}>⟳</span>
+          </button>
+        </div>
+        {/* Scrolls rather than wrapping, so the row keeps one predictable height on narrow
+            phones. Tap targets raised from 26px to 38px. */}
+        <div role="group" aria-label="Sort artists"
+          className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
           {[['movers', 'Movers'], ['gainers', 'Gainers'], ['value', 'Value'], ['price', 'Price'], ['name', 'A-Z']].map(([k, l]) => (
-            <button key={k} onClick={() => setSort(k)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${sort === k ? 'bg-stage text-ink' : 'bg-panel text-fog hover:text-paper'}`}>
+            <button key={k} onClick={() => setSort(k)} aria-pressed={sort === k}
+              className={`min-h-[38px] shrink-0 rounded-lg px-3.5 text-xs font-semibold transition-colors ${
+                sort === k ? 'bg-stage text-ink' : 'bg-panel text-fog hover:text-paper'}`}>
               {l}
             </button>
           ))}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmt } from '../lib/supabase'
 import { SkeletonRows, ErrorState } from '../components/States'
+import Avatar from '../components/Avatar'
 import { useSession } from '../App'
 
 export default function Leaderboard() {
@@ -57,7 +58,8 @@ export default function Leaderboard() {
                 r.rank === 3 ? 'text-[#C88A5B]' : 'text-fog'}`}>
                 {r.rank <= 3 ? ['🥇','🥈','🥉'][r.rank - 1] : `#${r.rank}`}
               </span>
-              <span className="flex-1 text-sm font-medium">
+              <Avatar username={r.username} url={r.avatar_url} size={32} />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
                 {r.username}{mine && <span className="ml-2 text-xs text-stage">you</span>}
               </span>
               <span className="num text-sm">${fmt(r.portfolio_value)}</span>
