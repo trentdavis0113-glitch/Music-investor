@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase'
 import Ticker from './components/Ticker'
 import ErrorBoundary from './components/ErrorBoundary'
 import { SkeletonRows } from './components/States'
+import CommandPalette from './components/CommandPalette'
 
 // Market is the landing page and uses a hand-rolled SVG sparkline, so it stays eager.
 import Market from './pages/Market'
@@ -37,8 +38,27 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [meta, setMeta] = useState({ ownsArtist: false, isAdmin: false, streak: 0 })
+  const [cmdOpen, setCmdOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Cmd/Ctrl+K anywhere, plus "/" as a bare shortcut — but never while the user is
+  // typing into a field, where "/" is just a slash.
+  useEffect(() => {
+    function onKey(e) {
+      const t = e.target
+      const typing = t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault(); setCmdOpen(o => !o); return
+      }
+      if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault(); setCmdOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     const ref = new URLSearchParams(window.location.search).get('ref')
@@ -102,8 +122,10 @@ export default function App() {
   }
 
   const tab = ({ isActive }) =>
-    'px-3 py-2 text-sm font-medium rounded-lg transition-colors ' +
-    (isActive ? 'bg-panel text-paper' : 'text-fog hover:text-paper')
+    // whitespace-nowrap: without it "How it works" and "For artists" wrapped to two lines
+    // once the search control joined the row, and pushed "Sign in" onto two lines too.
+    'px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap pressable ' +
+    (isActive ? 'bg-panel text-paper shadow-e1' : 'text-fog hover:text-paper')
 
   return (
     <SessionCtx.Provider value={session}>
@@ -117,6 +139,21 @@ export default function App() {
               <NavLink to="/" className="font-display text-lg font-extrabold tracking-tight">
                 Greenroom<span className="text-stage">.</span>Exchange
               </NavLink>
+
+              {/* A shortcut nobody can see is not a feature. Full affordance on desktop,
+                  icon on mobile where the nav collapses. */}
+              <button
+                onClick={() => setCmdOpen(true)}
+                aria-label="Search artists or jump to a page"
+                aria-keyshortcuts="Meta+K Control+K"
+                className="pressable ml-auto mr-2 flex shrink-0 items-center gap-2 rounded-lg border border-edge bg-panel px-2.5 py-2 text-fog hover:border-edge2 hover:text-paper sm:mr-3 lg:min-w-[12rem] lg:justify-start">
+                <span aria-hidden="true">⌕</span>
+                <span className="hidden text-sm sm:inline">Search artists…</span>
+                <kbd className="ml-auto hidden rounded border border-edge px-1.5 py-0.5 font-mono text-[10px] text-mute sm:block">
+                  ⌘K
+                </kbd>
+              </button>
+
               <nav className="hidden items-center gap-1 sm:flex">
                 <NavLink to="/" end className={tab}>Market</NavLink>
                 <NavLink to="/portfolio" className={tab}>Portfolio</NavLink>
@@ -130,9 +167,9 @@ export default function App() {
                 {!authReady ? (
                   <span className="ml-2 h-9 w-20 rounded-lg bg-panel/60" aria-hidden="true" />
                 ) : session ? (
-                  <button onClick={signOut} className="px-3 py-2 text-sm text-fog hover:text-paper">Sign out</button>
+                  <button onClick={signOut} className="pressable whitespace-nowrap px-3 py-2 text-sm text-fog hover:text-paper">Sign out</button>
                 ) : (
-                  <NavLink to="/auth" className="ml-2 rounded-lg bg-stage px-3 py-2 text-sm font-semibold text-ink">Sign in</NavLink>
+                  <NavLink to="/auth" className="pressable ml-2 shrink-0 whitespace-nowrap rounded-lg bg-stage px-3.5 py-2 text-sm font-semibold text-ink shadow-e1 hover:brightness-110">Sign in</NavLink>
                 )}
               </nav>
             </div>
@@ -173,6 +210,7 @@ export default function App() {
                   ? <span className={tab({ isActive: false })} aria-hidden="true">&nbsp;</span>
                   : <NavLink to={session ? '/for-artists' : '/auth'} className={tab}>{session ? 'Artists' : 'Sign in'}</NavLink>}
           </nav>
+          <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
         </div>
       </MetaCtx.Provider>
       </AuthReadyCtx.Provider>

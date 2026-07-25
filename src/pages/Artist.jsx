@@ -5,6 +5,7 @@ import { supabase, fmt, dayChange } from '../lib/supabase'
 import { SkeletonBlock, ErrorState } from '../components/States'
 import Toast from '../components/Toast'
 import NotFound from './NotFound'
+import { pushRecent } from '../lib/recent'
 import { useSession } from '../App'
 
 const RANGES = { '1D': 1, '1W': 7, 'ALL': 9999 }
@@ -43,6 +44,7 @@ export default function Artist() {
     if (!a) { setNotFound(true); return }
     setLoadErr(null); setNotFound(false)
     setArtist(a)
+    pushRecent(a)   // gives the command palette a memory of where you have been
     setTicks((t || []).reverse())
     setMetrics(m?.[0] || null)
     const { data: ups } = await supabase.from('artist_updates')

@@ -2,66 +2,93 @@
 @tailwind components;
 @tailwind utilities;
 
-body { @apply bg-ink text-paper font-body antialiased; }
-.num { @apply font-mono tabular-nums; }
+@layer base {
+  html {
+    /* Font scaling: respect the user's browser text size instead of locking to 16px. */
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ink text-paper font-body antialiased;
+    /* A single very soft wash so the page has a light source rather than reading flat. */
+    background-image:
+      radial-gradient(80rem 40rem at 50% -12rem, rgba(139, 124, 246, .10), transparent 70%);
+    background-attachment: fixed;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Tabular figures everywhere numbers change, so prices don't jitter as digits swap. */
+  .num { @apply font-mono tabular-nums; }
+
+  /* Keyboard users could previously tab through the whole app with no visible focus. */
+  :focus-visible {
+    outline: 2px solid theme('colors.stage');
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* ...but don't double-draw it on mouse click. */
+  :focus:not(:focus-visible) { outline: none; }
+}
+
+@layer components {
+  .card {
+    @apply rounded-card border border-edge bg-panel shadow-e1;
+  }
+  .card-raised {
+    @apply rounded-card border border-edge2 bg-panel shadow-e2;
+  }
+  .hairline { @apply border-edge; }
+
+  /* Every interactive surface shares one press response, so the whole app feels like
+     one object rather than a collection of differently-tuned widgets. */
+  .pressable {
+    @apply transition-[transform,background-color,border-color,opacity] duration-instant ease-out;
+  }
+  .pressable:active { transform: scale(.975); }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold;
+  }
+
+  .skip-link { position: absolute; left: -9999px; top: 0; z-index: 60; }
+  .skip-link:focus {
+    left: .5rem; top: .5rem;
+    @apply rounded-lg bg-stage px-3 py-2 text-sm font-semibold text-ink;
+  }
+}
+
+/* Loading placeholders, sized to match the real rows so layout doesn't jump. */
+.shimmer {
+  background-image: linear-gradient(90deg, #1B1D29 25%, #2A2D3E 37%, #1B1D29 63%);
+  background-size: 200% 100%;
+  @apply animate-shimmer;
+}
 
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
 .marquee-track { animation: marquee 45s linear infinite; }
+
+/* Route transition. Fast enough to feel like a response, not a performance. */
+.animate-fadeup { @apply animate-rise; }
+
+.toast { @apply animate-scaleIn; }
+
+/*
+  Reduced motion is honoured wholesale rather than per-component: anything that moves,
+  loops or shimmers is stilled, and scroll snapping to instant. Content never disappears —
+  animations are neutralised to their end state, not to nothing.
+*/
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
   .marquee-track { animation: none; }
-}
-
-button { transition: transform .08s ease, opacity .15s ease, background-color .15s ease; }
-button:active { transform: scale(.97); }
-
-@keyframes fadeup {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
-.animate-fadeup { animation: fadeup .22s ease both; }
-
-@keyframes toastin {
-  from { opacity: 0; transform: translateY(10px) scale(.97); }
-  to { opacity: 1; transform: none; }
-}
-.toast { animation: toastin .18s ease both; }
-
-/* Loading placeholders. Sized to match the real rows so the layout doesn't jump. */
-@keyframes shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
-}
-.shimmer {
-  background-image: linear-gradient(90deg, #1B1D29 25%, #2A2D3E 37%, #1B1D29 63%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-}
-
-/* Keyboard users could previously tab through the whole app with no visible focus. */
-:focus-visible {
-  outline: 2px solid #8B7CF6;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.skip-link {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  z-index: 50;
-}
-.skip-link:focus {
-  left: 0.5rem;
-  top: 0.5rem;
-  @apply rounded-lg bg-stage px-3 py-2 text-sm font-semibold text-ink;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-fadeup, .toast { animation: none; }
-  .shimmer { animation: none; }
-  button:active { transform: none; }
+  .pressable:active { transform: none; }
   html { scroll-behavior: auto; }
 }

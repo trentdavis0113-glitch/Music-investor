@@ -37,7 +37,9 @@ test('the market renders from the aggregated endpoint', async ({ page }) => {
   await mockMarket(page)
   await page.goto('/')
 
-  await expect(page.getByRole('link', { name: /Nova Reign/ })).toBeVisible()
+  // Scoped to the artist list: the "Top gainer" tile is also a link to the same artist.
+  const list = page.getByRole('region', { name: 'Artists' })
+  await expect(list.getByRole('link', { name: /Nova Reign/ })).toBeVisible()
   await expect(page.getByText('$24.50').first()).toBeVisible()
   await expect(page.getByText('+3.20%').first()).toBeVisible()
   await expect(page.getByText('-1.40%').first()).toBeVisible()
@@ -50,7 +52,8 @@ test('Ticker and Market share a single request', async ({ page }) => {
   await mockMarket(page, { onCall: () => { calls++ } })
   await page.goto('/')
 
-  await expect(page.getByRole('link', { name: /Nova Reign/ })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Artists' })
+    .getByRole('link', { name: /Nova Reign/ })).toBeVisible()
   await page.waitForTimeout(1500)
 
   expect(calls).toBe(1)
@@ -81,20 +84,23 @@ test('a failed market load offers a retry rather than an empty market', async ({
 test('search filters by name, symbol and genre', async ({ page }) => {
   await mockMarket(page)
   await page.goto('/')
-  await expect(page.getByRole('link', { name: /Nova Reign/ })).toBeVisible()
+  const list = page.getByRole('region', { name: 'Artists' })
+  await expect(list.getByRole('link', { name: /Nova Reign/ })).toBeVisible()
 
   const search = page.getByPlaceholder('Search artists or genres')
 
   await search.fill('glas')
-  await expect(page.getByRole('link', { name: /Glasshouse/ })).toBeVisible()
-  await expect(page.getByRole('link', { name: /Nova Reign/ })).toHaveCount(0)
+  await expect(list.getByRole('link', { name: /Glasshouse/ })).toBeVisible()
+  await expect(list.getByRole('link', { name: /Nova Reign/ })).toHaveCount(0)
 
   await search.fill('Hip-Hop')
-  await expect(page.getByRole('link', { name: /Nova Reign/ })).toBeVisible()
+  await expect(list.getByRole('link', { name: /Nova Reign/ })).toBeVisible()
 
   await search.fill('$GLAS')
-  await expect(page.getByRole('link', { name: /Glasshouse/ })).toBeVisible()
+  await expect(list.getByRole('link', { name: /Glasshouse/ })).toBeVisible()
 
   await search.fill('nothing matches this')
-  await expect(page.getByText('No artists match that search.')).toBeVisible()
+  // Scoped: the search input's own "×" is also labelled "Clear search".
+  await expect(list.getByText(/No artists match/)).toBeVisible()
+  await expect(list.getByRole('button', { name: 'Clear search' })).toBeVisible()
 })

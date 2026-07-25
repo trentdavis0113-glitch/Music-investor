@@ -9,7 +9,11 @@ const CARDS = [
 ]
 
 export default function HowStrip() {
-  const [open, setOpen] = useState(() => localStorage.getItem('howstrip') !== 'closed')
+  // Collapsed by default. Expanded, this pushed the market — the actual product — about
+  // 800px down on a phone, so a first-time visitor read four paragraphs of explanation
+  // before seeing a single artist. The hero already carries the pitch; this is the
+  // follow-up for people who want the mechanics.
+  const [open, setOpen] = useState(() => localStorage.getItem('howstrip') === 'open')
 
   function toggle() {
     const next = !open
@@ -18,12 +22,14 @@ export default function HowStrip() {
   }
 
   return (
-    <section className="rounded-xl border border-edge bg-panel">
-      <button onClick={toggle} className="flex w-full items-center justify-between px-4 py-3">
+    <section className="card overflow-hidden">
+      <button onClick={toggle} aria-expanded={open}
+        className="pressable flex w-full items-center justify-between px-4 py-3 text-left hover:bg-edge/30">
         <span className="font-display text-sm font-bold uppercase tracking-widest text-fog">
           How this works
         </span>
-        <span className="text-fog">{open ? '−' : '+'}</span>
+        <span aria-hidden="true"
+          className={`text-fog transition-transform duration-fast ease-out ${open ? 'rotate-45' : ''}`}>+</span>
       </button>
       {open && (
         <div className="border-t border-edge p-4">

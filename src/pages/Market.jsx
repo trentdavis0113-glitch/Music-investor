@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase, fmt } from '../lib/supabase'
 import { useMarket, refreshMarket } from '../lib/market'
 import Sparkline from '../components/Sparkline'
+import Avatar from '../components/Avatar'
 import HowStrip from '../components/HowStrip'
 import PulseBar from '../components/PulseBar'
 import { SkeletonRows, ErrorState } from '../components/States'
@@ -114,15 +115,21 @@ export default function Market() {
   const top = gainers[0], bottom = gainers[gainers.length - 1]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Tightened: this was ~350px on a phone, pushing the market itself off screen.
+          One line of pitch, one line of terms, one action. */}
       {!session && (
-        <div className="rounded-xl border border-stage/40 bg-stage/10 p-4">
-          <p className="font-display text-lg font-bold">Trade shares of rising artists.</p>
-          <p className="mt-1 text-sm text-fog">
-            Prices move on real Spotify momentum and trader demand. Start with $10,000 in simulated cash. No real money.
+        <div className="rounded-card border border-stage/40 bg-stage/10 p-4 shadow-e1">
+          <p className="font-display text-lg font-extrabold leading-tight sm:text-2xl">
+            Trade shares of rising artists.
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-fog">
+            Real listener momentum sets the price. Start with{' '}
+            <span className="text-paper">$10,000 simulated</span>.
           </p>
           <div className="mt-3 flex items-center gap-4">
-            <Link to="/auth" className="rounded-lg bg-stage px-4 py-2 text-sm font-semibold text-ink">
+            <Link to="/auth"
+              className="pressable rounded-lg bg-stage px-4 py-2.5 text-sm font-semibold text-ink shadow-e1 hover:brightness-110">
               Start trading free
             </Link>
             <Link to="/how-it-works" className="text-sm text-stage underline underline-offset-4">
@@ -175,10 +182,12 @@ export default function Market() {
         </section>
       )}
 
-      <div className="grid grid-cols-3 gap-3 text-center">
-        <Chip label="Artists listed" value={rows.length} />
-        <Chip label="Top gainer" value={top ? `${top.pct >= 0 ? '+' : ''}${top.pct.toFixed(1)}%` : '—'} tone="text-gain" sub={top?.name} />
-        <Chip label="Biggest drop" value={bottom ? `${bottom.pct.toFixed(1)}%` : '—'} tone="text-loss" sub={bottom?.name} />
+      <div className="grid grid-cols-3 gap-2 text-center sm:gap-3">
+        <Chip label="Listed" value={rows.length} sub="artists trading" />
+        <Chip label="Top gainer" tone="text-gain" sub={top?.name} to={top && `/artist/${top.id}`}
+          value={top ? `${top.pct >= 0 ? '+' : ''}${top.pct.toFixed(1)}%` : '—'} />
+        <Chip label="Biggest drop" tone="text-loss" sub={bottom?.name} to={bottom && `/artist/${bottom.id}`}
+          value={bottom ? `${bottom.pct.toFixed(1)}%` : '—'} />
       </div>
 
       {watchIds.length > 0 && (
@@ -232,38 +241,19 @@ export default function Market() {
         </div>
       </div>
 
-      <div className="divide-y divide-edge rounded-xl border border-edge bg-panel">
-        {view.map(a => (
-          <Link key={a.id} to={`/artist/${a.id}`}
-            className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-edge/40">
-            {a.image_url
-              ? <img src={a.image_url} alt="" className="h-9 w-9 rounded-full object-cover" />
-              : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-edge font-display text-xs font-bold">
-                  {a.name.slice(0, 2).toUpperCase()}
-                </div>}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">
-                {a.name} <span className="num text-xs text-fog">${a.symbol}</span>
-              </p>
-              <p className="truncate text-xs text-fog">
-                {sort === 'value' && a.gap != null
-                  ? <span className={a.gap >= 0 ? 'text-gain' : 'text-loss'}>
-                      {a.gap >= 0 ? '+' : ''}{a.gap.toFixed(1)}% vs fair value
-                    </span>
-                  : (a.genre || 'Independent')}
-              </p>
-            </div>
-            <div className="hidden sm:block"><Sparkline points={a.spark} up={a.pct >= 0} /></div>
-            <div className="w-24 text-right">
-              <p className="num text-sm">${fmt(a.latest)}</p>
-              <p className={`num text-xs ${a.pct >= 0 ? 'text-gain' : 'text-loss'}`}>
-                {a.pct >= 0 ? '+' : ''}{a.pct.toFixed(2)}%
-              </p>
-            </div>
-          </Link>
-        ))}
-        {view.length === 0 && <p className="px-4 py-6 text-sm text-fog">No artists match that search.</p>}
-      </div>
+      {/* Named landmark: gives screen-reader users a way to jump straight to the market
+          instead of tabbing through the hero and controls every time. */}
+      <section aria-label="Artists" className="card divide-y divide-edge overflow-hidden">
+        {view.map(a => <ArtistRow key={a.id} a={a} />)}
+        {view.length === 0 && (
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm text-paper">No artists match “{q}”.</p>
+            <button onClick={() => setQ('')} className="mt-2 text-sm text-stage underline underline-offset-4">
+              Clear search
+            </button>
+          </div>
+        )}
+      </section>
 
       {activity.length > 0 && (
         <section>
@@ -294,11 +284,81 @@ export default function Market() {
   )
 }
 
-function Chip({ label, value, tone = '', sub }) {
+/**
+ * One artist, readable at a glance.
+ *
+ * The old row gave price, change and genre equal weight, so nothing told you where to
+ * look. Hierarchy now runs: name → price → change → why it might matter. The signal chips
+ * are the point — they surface the two things worth acting on (a big move, or a price
+ * sitting well under fair value) without the user having to sort and compare.
+ */
+function ArtistRow({ a }) {
+  const hot = Math.abs(a.pct) >= 5
+  const value = a.gap != null && a.gap >= 5
+
   return (
-    <div className="rounded-xl border border-edge bg-panel px-2 py-3">
-      <p className={`num text-lg ${tone}`}>{value}</p>
-      <p className="truncate text-xs text-fog">{sub || label}</p>
-    </div>
+    <Link to={`/artist/${a.id}`}
+      className="group flex items-center gap-3 px-3 py-3 transition-colors duration-instant ease-out hover:bg-edge/40 sm:px-4">
+      <Avatar username={a.name} url={a.image_url} size={40} />
+
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 truncate text-[15px] font-semibold leading-tight text-paper">
+          <span className="truncate">{a.name}</span>
+          {a.metrics_verified && (
+            <span title="Listener data verified" aria-label="Listener data verified"
+              className="shrink-0 text-[11px] text-stage">✓</span>
+          )}
+        </p>
+        {/* On a phone the signal chip earns the space over the genre, which was truncating
+            to "Hip-…". Genre returns from sm up, where there is room for both. */}
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-fog">
+          <span className="num shrink-0 text-mute">${a.symbol}</span>
+          <span aria-hidden="true" className={`text-mute ${value || hot ? 'hidden sm:inline' : ''}`}>·</span>
+          <span className={`truncate ${value || hot ? 'hidden sm:inline' : ''}`}>
+            {a.genre || 'Independent'}
+          </span>
+          {value && (
+            <span className="chip shrink-0 bg-gain/15 text-gain">
+              +{a.gap.toFixed(0)}% value
+            </span>
+          )}
+          {hot && !value && (
+            <span className="chip shrink-0 bg-stage/20 text-stage">Hot</span>
+          )}
+        </p>
+      </div>
+
+      <div className="hidden shrink-0 sm:block">
+        <Sparkline points={a.spark} up={a.pct >= 0} />
+      </div>
+
+      <div className="w-[5.5rem] shrink-0 text-right">
+        <p className="num text-[15px] font-semibold leading-tight text-paper">${fmt(a.latest)}</p>
+        <p className={`num mt-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+          a.pct >= 0 ? 'bg-gain/12 text-gain' : 'bg-loss/12 text-loss'}`}>
+          {a.pct >= 0 ? '+' : ''}{a.pct.toFixed(2)}%
+        </p>
+      </div>
+    </Link>
   )
+}
+
+/**
+ * The old version rendered `sub || label`, so the two most interesting tiles showed an
+ * artist name with no indication of whether it was the day's best or worst — the number
+ * was there but the meaning wasn't. Label and subject are now both present, and the tile
+ * links through to the artist it is describing.
+ */
+function Chip({ label, value, tone = '', sub, to }) {
+  const body = (
+    <>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-mute">{label}</p>
+      <p className={`num mt-1 text-lg font-semibold leading-none ${tone}`}>{value}</p>
+      {sub && <p className="mt-1 truncate text-xs text-fog">{sub}</p>}
+    </>
+  )
+  const cls = 'card px-2 py-2.5 text-center sm:py-3'
+  return to
+    ? <Link to={to} className={`${cls} pressable block hover:border-edge2`}>{body}</Link>
+    : <div className={cls}>{body}</div>
 }
