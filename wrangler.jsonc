@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "greenroom-exchange",
+  "compatibility_date": "2026-07-25",
+
+  // The Worker only exists to inject per-artist Open Graph tags. Everything else is
+  // served straight from the asset layer without invoking Worker code.
+  "main": "./worker/index.ts",
+
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+
+    // React Router owns the routes. Without this, /portfolio and /artist/1 would 404
+    // on a hard refresh or a shared link.
+    "not_found_handling": "single-page-application",
+
+    // Run the Worker only for artist pages, where the shared link needs artist-specific
+    // OG tags. Every other navigation is served directly from cache.
+    "run_worker_first": ["/artist/*"]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
