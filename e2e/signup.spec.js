@@ -3,11 +3,21 @@ import { test, expect } from '@playwright/test'
 const SIGNUP = '**/functions/v1/signup'
 const TOKEN = '**/auth/v1/token**'
 
-/** Block every Supabase call by default so tests never depend on the network. */
-async function isolate(page) {
-  await page.route('**/*.supabase.co/**', route => route.fulfill({
-    status: 200, contentType: 'application/json', body: '[]',
-  }))
+/**
+ * Block every Supabase call by default so tests never depend on the network.
+ * One handler rather than several, so there is no route-precedence ambiguity; tests that
+ * need a specific endpoint register it afterwards, which takes priority.
+ */
+async function isolate(page, { google = true } = {}) {
+  await page.route('**/*.supabase.co/**', route => {
+    if (route.request().url().includes('/auth/v1/settings')) {
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ external: { google } }),
+      })
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
 }
 
 async function gotoSignup(page) {
@@ -192,9 +202,37 @@ test('Google button offers an account chooser and is disabled while redirecting'
   expect(decodeURIComponent(authorizeUrl)).toContain('/portfolio')
 })
 
-// signInWithOAuth navigates the browser rather than fetching, so a disabled provider
-// never rejects client-side — Supabase bounces the user back with ?error= on whatever
-// URL it was told to return to. This is the path that actually happens in production.
+// The real failure mode when Google is off: Supabase answers the authorize request with a
+// raw JSON 400 on its own domain and never redirects back, so the app gets no chance to
+// explain anything. The only fix is to not offer the button at all.
+test('the Google button is hidden entirely when the provider is disabled', async ({ page }) => {
+  await isolate(page, { google: false })
+  await page.goto('/auth')
+
+  await expect(page.getByLabel('Email')).toBeVisible()          // page rendered
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0)
+  await expect(page.getByText('or use email')).toHaveCount(0)   // divider goes too
+})
+
+test('the Google button is offered when the provider is enabled', async ({ page }) => {
+  await isolate(page, { google: true })
+  await page.goto('/auth')
+
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeEnabled()
+})
+
+// A settings check that fails must not hide a working button.
+test('the Google button still appears if the capability check fails', async ({ page }) => {
+  await page.route('**/*.supabase.co/**', route => {
+    if (route.request().url().includes('/auth/v1/settings')) return route.abort()
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
+  await page.goto('/auth')
+
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeEnabled()
+})
+
+// Some OAuth failures DO redirect back with ?error= — those are still explained in-app.
 test('a disabled Google provider is explained in plain language', async ({ page }) => {
   await isolate(page)
   await page.goto('/?error=validation_failed&error_description=Unsupported+provider%3A+provider+is+not+enabled')
