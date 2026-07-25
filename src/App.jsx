@@ -1,21 +1,29 @@
-import { useEffect, useState, createContext, useContext } from 'react'
+import { useEffect, useState, createContext, useContext, lazy, Suspense } from 'react'
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import Ticker from './components/Ticker'
-import Market from './pages/Market'
-import Artist from './pages/Artist'
-import Portfolio from './pages/Portfolio'
-import Leaderboard from './pages/Leaderboard'
-import Auth from './pages/Auth'
-import ForArtists from './pages/ForArtists'
-import Studio from './pages/Studio'
-import Admin from './pages/Admin'
-import ResetPassword from './pages/ResetPassword'
-import HowItWorks from './pages/HowItWorks'
-import Trader from './pages/Trader'
-import NotFound from './pages/NotFound'
-import Terms from './pages/Terms'
 import ErrorBoundary from './components/ErrorBoundary'
+import { SkeletonRows } from './components/States'
+
+// Market is the landing page and uses a hand-rolled SVG sparkline, so it stays eager.
+import Market from './pages/Market'
+
+// Everything else is split out. recharts alone is 375 kB (103 kB gzipped) — larger than
+// React and Supabase combined — and only Artist, Portfolio and Studio use it. Importing
+// them statically meant every visitor downloaded the charting library to look at the
+// market list, which never renders a chart.
+const Artist = lazy(() => import('./pages/Artist'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
+const Leaderboard = lazy(() => import('./pages/Leaderboard'))
+const Auth = lazy(() => import('./pages/Auth'))
+const ForArtists = lazy(() => import('./pages/ForArtists'))
+const Studio = lazy(() => import('./pages/Studio'))
+const Admin = lazy(() => import('./pages/Admin'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const HowItWorks = lazy(() => import('./pages/HowItWorks'))
+const Trader = lazy(() => import('./pages/Trader'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const Terms = lazy(() => import('./pages/Terms'))
 
 const SessionCtx = createContext(null)
 const MetaCtx = createContext({ ownsArtist: false, isAdmin: false })
@@ -133,6 +141,7 @@ export default function App() {
           <main id="main" key={location.pathname} className="animate-fadeup mx-auto max-w-5xl px-4 py-6">
             {/* Keyed by path so navigating away clears a crashed page instead of pinning the error. */}
             <ErrorBoundary key={location.pathname}>
+            <Suspense fallback={<SkeletonRows rows={5} />}>
             <Routes>
               <Route path="/" element={<Market />} />
               <Route path="/artist/:id" element={<Artist />} />
@@ -148,6 +157,7 @@ export default function App() {
               <Route path="/terms" element={<Terms />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
             </ErrorBoundary>
           </main>
 
