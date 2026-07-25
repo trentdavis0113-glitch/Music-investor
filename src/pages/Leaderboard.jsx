@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmt } from '../lib/supabase'
+import { SkeletonRows, ErrorState } from '../components/States'
 import { useSession } from '../App'
 
 export default function Leaderboard() {
@@ -8,9 +9,15 @@ export default function Leaderboard() {
   const [rows, setRows] = useState(null)
   const [me, setMe] = useState(null)
   const [endsAt, setEndsAt] = useState(null)
+  const [err, setErr] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
-    supabase.rpc('get_leaderboard').then(({ data }) => setRows(data || []))
+    supabase.rpc('get_leaderboard').then(({ data, error }) => {
+      // Without this, a failed RPC rendered "No traders on the board yet."
+      if (error) { setErr(error.message || 'Request failed.'); return }
+      setErr(null); setRows(data || [])
+    })
     supabase.from('seasons').select('ends_at')
       .lte('starts_at', new Date().toISOString()).gte('ends_at', new Date().toISOString())
       .limit(1).then(({ data }) => setEndsAt(data?.[0]?.ends_at || null))
@@ -18,9 +25,14 @@ export default function Leaderboard() {
       supabase.from('profiles').select('username').eq('id', session.user.id)
         .maybeSingle().then(({ data }) => setMe(data?.username || null))
     }
-  }, [session])
+  }, [session, reloadKey])
 
-  if (rows === null) return <p className="text-fog">Loading leaderboard…</p>
+  if (err && rows === null) return (
+    <ErrorState message="Couldn't load the leaderboard." onRetry={() => { setErr(null); setReloadKey(k => k + 1) }}>
+      {err}
+    </ErrorState>
+  )
+  if (rows === null) return <SkeletonRows rows={6} />
   if (!rows.length) return <p className="text-fog">No traders on the board yet. Make a trade and claim #1.</p>
 
   return (

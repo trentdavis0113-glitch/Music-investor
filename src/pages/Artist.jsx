@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { LineChart, Line, YAxis, XAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
 import { supabase, fmt, dayChange } from '../lib/supabase'
+import { SkeletonBlock, ErrorState } from '../components/States'
+import Toast from '../components/Toast'
+import NotFound from './NotFound'
 import { useSession } from '../App'
 
 const RANGES = { '1D': 1, '1W': 7, 'ALL': 9999 }
@@ -23,15 +26,22 @@ export default function Artist() {
   const [range, setRange] = useState('1W')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
+  const [notFound, setNotFound] = useState(false)
 
   async function loadAll() {
-    const [{ data: a }, { data: t }, { data: m }] = await Promise.all([
-      supabase.from('artists').select('*').eq('id', id).single(),
+    // maybeSingle() rather than single(): a bad /artist/:id used to reject, leaving
+    // `artist` null forever and the page stuck on "Loading…".
+    const [{ data: a, error: aErr }, { data: t }, { data: m }] = await Promise.all([
+      supabase.from('artists').select('*').eq('id', id).maybeSingle(),
       supabase.from('price_ticks').select('price,ts').eq('artist_id', id)
         .order('ts', { ascending: false }).limit(800),
       supabase.from('metric_snapshots').select('popularity,followers')
         .eq('artist_id', id).order('captured_at', { ascending: false }).limit(1)
     ])
+    if (aErr) { setLoadErr(aErr.message || 'Request failed.'); return }
+    if (!a) { setNotFound(true); return }
+    setLoadErr(null); setNotFound(false)
     setArtist(a)
     setTicks((t || []).reverse())
     setMetrics(m?.[0] || null)
@@ -110,7 +120,20 @@ export default function Artist() {
     loadAll()
   }
 
-  if (!artist) return <p className="text-fog">Loading…</p>
+  if (notFound) return <NotFound />
+  if (loadErr && !artist) return (
+    <ErrorState message="Couldn't load this artist." onRetry={() => { setLoadErr(null); loadAll() }}>
+      {loadErr}
+    </ErrorState>
+  )
+  if (!artist) return (
+    <div className="space-y-6">
+      <p className="sr-only">Loading artist</p>
+      <SkeletonBlock className="h-20" />
+      <SkeletonBlock className="h-64" />
+      <SkeletonBlock className="h-24" />
+    </div>
+  )
   const cost = latest ? Number(shares || 0) * latest : 0
   const gapPct = fairValue && latest ? ((fairValue - latest) / latest) * 100 : null
 
@@ -134,13 +157,18 @@ export default function Artist() {
         <div className="text-right">
           <div className="mb-1 flex justify-end gap-2">
             {session && (
-              <button onClick={toggleWatch} title="Watchlist"
+              <button onClick={toggleWatch}
+                title={watched ? 'Remove from watchlist' : 'Add to watchlist'}
+                aria-label={watched ? 'Remove from watchlist' : 'Add to watchlist'}
+                aria-pressed={watched}
                 className={`rounded-lg border border-edge px-2 py-1 text-sm ${watched ? 'text-stage' : 'text-fog hover:text-paper'}`}>
-                {watched ? '★' : '☆'}
+                <span aria-hidden="true">{watched ? '★' : '☆'}</span>
               </button>
             )}
-            <button onClick={share} title="Share"
-              className="rounded-lg border border-edge px-2 py-1 text-sm text-fog hover:text-paper">↗</button>
+            <button onClick={share} title="Share" aria-label="Share this artist"
+              className="rounded-lg border border-edge px-2 py-1 text-sm text-fog hover:text-paper">
+              <span aria-hidden="true">↗</span>
+            </button>
           </div>
           <p className="num text-2xl">${latest ? fmt(latest) : '—'}</p>
           <p className={`num text-sm ${pct >= 0 ? 'text-gain' : 'text-loss'}`}>
@@ -276,12 +304,6 @@ export default function Artist() {
               <button disabled={busy || heldShares <= 0} onClick={() => trade('sell')}
                 className="rounded-lg bg-loss py-2.5 font-semibold text-ink disabled:opacity-40">Sell</button>
             </div>
-            {msg && (
-              <div className={`toast fixed inset-x-4 bottom-32 z-30 mx-auto max-w-sm rounded-xl border px-4 py-3 text-center text-sm font-medium backdrop-blur sm:bottom-8
-                ${msg.ok ? 'border-gain/40 bg-gain/15 text-gain' : 'border-loss/40 bg-loss/15 text-loss'}`}>
-                {msg.text}
-              </div>
-            )}
             {myTrades.length > 0 && (
               <div className="mt-4 border-t border-edge pt-3">
                 <p className="text-xs font-semibold uppercase tracking-widest text-fog">Your recent trades</p>
@@ -343,6 +365,9 @@ export default function Artist() {
           </button>
         </div>
       )}
+
+      {/* Root-level so share/copy feedback reaches signed-out visitors too. */}
+      <Toast msg={msg} onDone={() => setMsg(null)} />
     </div>
   )
 }

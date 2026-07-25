@@ -2,17 +2,25 @@ import { useEffect, useState } from 'react'
 import { LineChart, Line, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Link } from 'react-router-dom'
 import { supabase, fmt } from '../lib/supabase'
-import { useSession, useMeta } from '../App'
+import { SkeletonRows, SkeletonBlock, ErrorState, SignedOut } from '../components/States'
+import { useSession, useMeta, useAuthReady } from '../App'
 
 export default function Portfolio() {
   const session = useSession()
+  const authReady = useAuthReady()
   const { streak } = useMeta()
+  const [err, setErr] = useState(null)
+  const [copied, setCopied] = useState(false)
+  // Set by signup when the requested username was already taken.
+  const [renamed, setRenamed] = useState(() => sessionStorage.getItem('greenroom_rename_notice'))
+  const [reloadKey, setReloadKey] = useState(0)
   const [cash, setCash] = useState(null)
   const [rows, setRows] = useState(null)
   const [txns, setTxns] = useState([])
   const [snaps, setSnaps] = useState([])
   const [uname, setUname] = useState('')
   const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
   const [nameMsg, setNameMsg] = useState(null)
   const [badges, setBadges] = useState([])
   const [isPublic, setIsPublic] = useState(false)
@@ -20,7 +28,9 @@ export default function Portfolio() {
   useEffect(() => {
     if (!session) return
     async function load() {
-      const { data: acct } = await supabase.rpc('ensure_account')
+      const { data: acct, error: acctErr } = await supabase.rpc('ensure_account')
+      if (acctErr) { setErr(acctErr.message || 'Request failed.'); return }
+      setErr(null)
       setCash(acct?.cash ?? 0)
       supabase.rpc('get_achievements').then(({ data }) => setBadges(data || []))
       const { data: sn } = await supabase.from('portfolio_snapshots')
@@ -54,19 +64,24 @@ export default function Portfolio() {
       }).sort((x, y) => y.value - x.value))
     }
     load()
-  }, [session])
+  }, [session, reloadKey])
 
   async function saveUsername() {
     setNameMsg(null)
-    const clean = uname.trim()
+    const clean = nameDraft.trim()
     if (clean.length < 3 || clean.length > 24) { setNameMsg('3 to 24 characters.'); return }
+    // Same charset as signup, so usernames stay safe in /trader/:username and ?ref= links.
+    if (!/^[a-zA-Z0-9_.-]+$/.test(clean)) { setNameMsg('Letters, numbers, and . _ - only.'); return }
     const { error } = await supabase.from('profiles')
       .update({ username: clean }).eq('id', session.user.id)
     if (error) {
       setNameMsg(/duplicate|unique/i.test(error.message) ? 'That username is taken.' : error.message)
       return
     }
+    setUname(clean)
     setEditingName(false)
+    setNameMsg('Saved.')
+    setTimeout(() => setNameMsg(null), 2000)
   }
 
   async function togglePublic() {
@@ -76,12 +91,21 @@ export default function Portfolio() {
     if (!error) setIsPublic(next)
   }
 
-  if (!session) return (
-    <p className="text-fog">
-      <Link to="/auth" className="text-stage underline underline-offset-4">Sign in</Link> to see your portfolio. New accounts start with $10,000 simulated cash.
-    </p>
+  // Wait for auth to resolve, otherwise a returning trader sees "Sign in" for a beat.
+  if (!authReady) return <SkeletonBlock className="h-32" />
+  if (!session) return <SignedOut what="your portfolio" />
+  if (err && rows === null) return (
+    <ErrorState message="Couldn't load your portfolio." onRetry={() => { setErr(null); setReloadKey(k => k + 1) }}>
+      {err}
+    </ErrorState>
   )
-  if (rows === null) return <p className="text-fog">Loading portfolio…</p>
+  if (rows === null) return (
+    <div className="space-y-4">
+      <p className="sr-only">Loading portfolio</p>
+      <SkeletonBlock className="h-24" />
+      <SkeletonRows rows={4} />
+    </div>
+  )
 
   const invested = rows.reduce((s, r) => s + r.value, 0)
   const totalPl = rows.reduce((s, r) => s + r.pl, 0)
@@ -89,20 +113,42 @@ export default function Portfolio() {
 
   return (
     <div className="space-y-6">
+      {renamed && (
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-stage/40 bg-stage/10 px-4 py-3">
+          <p className="text-sm">
+            The username you picked was taken, so you’re trading as{' '}
+            <span className="font-semibold text-stage">{renamed}</span>. Change it any time below.
+          </p>
+          <button
+            onClick={() => { sessionStorage.removeItem('greenroom_rename_notice'); setRenamed(null) }}
+            aria-label="Dismiss" className="shrink-0 text-fog hover:text-paper">✕</button>
+        </div>
+      )}
       <div className="flex items-center justify-between text-sm">
         {editingName ? (
           <span className="flex items-center gap-2">
-            <input value={uname} onChange={e => setUname(e.target.value)} maxLength={24}
+            <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} maxLength={24}
+              aria-label="Username" autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') saveUsername()
+                if (e.key === 'Escape') { setEditingName(false); setNameMsg(null) }
+              }}
               className="w-40 rounded-lg border border-edge bg-panel px-2 py-1 text-sm outline-none focus:border-stage" />
             <button onClick={saveUsername} className="text-stage">Save</button>
+            {/* Cancel used to be impossible: the input wrote straight to the displayed name. */}
+            <button onClick={() => { setEditingName(false); setNameMsg(null) }}
+              className="text-fog hover:text-paper">Cancel</button>
           </span>
         ) : (
           <span className="text-fog">
             Trading as <span className="text-paper">{uname}</span>{' '}
-            <button onClick={() => setEditingName(true)} className="text-stage underline underline-offset-4">edit</button>
+            <button onClick={() => { setNameDraft(uname); setEditingName(true); setNameMsg(null) }}
+              className="text-stage underline underline-offset-4">edit</button>
           </span>
         )}
-        {nameMsg && <span className="text-loss">{nameMsg}</span>}
+        {nameMsg && (
+          <span aria-live="polite" className={nameMsg === 'Saved.' ? 'text-gain' : 'text-loss'}>{nameMsg}</span>
+        )}
         {streak > 0 && (
           <span className="num rounded-lg border border-edge bg-panel px-2.5 py-1 text-xs">
             🔥 {streak} day{streak === 1 ? '' : 's'}
@@ -179,10 +225,21 @@ export default function Portfolio() {
       <div className="flex items-center justify-between rounded-xl border border-edge bg-panel px-4 py-3">
         <div className="min-w-0">
           <p className="text-sm font-medium">Invite friends</p>
-          <p className="num truncate text-xs text-fog">{`${window.location.origin}/?ref=${uname}`}</p>
+          {/* encodeURIComponent: legacy usernames may contain spaces, which broke the link. */}
+          <p className="num truncate text-xs text-fog">
+            {`${window.location.origin}/?ref=${encodeURIComponent(uname)}`}
+          </p>
         </div>
-        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?ref=${uname}`); setNameMsg(null) }}
-          className="shrink-0 rounded-lg bg-stage px-3 py-1.5 text-xs font-semibold text-ink">Copy link</button>
+        <button
+          onClick={async () => {
+            const link = `${window.location.origin}/?ref=${encodeURIComponent(uname)}`
+            try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+            catch { setCopied(false) }
+          }}
+          aria-live="polite"
+          className="shrink-0 rounded-lg bg-stage px-3 py-1.5 text-xs font-semibold text-ink">
+          {copied ? 'Copied ✓' : 'Copy link'}
+        </button>
       </div>
 
       {badges.length > 0 && (

@@ -37,9 +37,16 @@ export default async (req: Request, context: Context) => {
       .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
       .replace(/(property="og:title" content=")[^"]*(")/, `$1${title}$2`)
       .replace(/(property="og:description" content=")[^"]*(")/, `$1${desc}$2`)
-      .replace(/(name="description" content=")[^"]*(")/, `$1${desc}$2`);
+      .replace(/(name="description" content=")[^"]*(")/, `$1${desc}$2`)
+      // Keep the twitter:* card in sync with og:* or X falls back to the generic site card.
+      .replace(/(name="twitter:title" content=")[^"]*(")/, `$1${title}$2`)
+      .replace(/(name="twitter:description" content=")[^"]*(")/, `$1${desc}$2`)
+      .replace(/(property="og:url" content=")[^"]*(")/, `$1${esc(req.url)}$2`);
     if (artist.image_url) {
-      out = out.replace(/(property="og:image" content=")[^"]*(")/, `$1${esc(artist.image_url)}$2`);
+      const img = esc(artist.image_url);
+      out = out
+        .replace(/(property="og:image" content=")[^"]*(")/, `$1${img}$2`)
+        .replace(/(name="twitter:image" content=")[^"]*(")/, `$1${img}$2`);
     }
     return new Response(out, { status: res.status, headers: res.headers });
   } catch {

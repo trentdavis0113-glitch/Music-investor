@@ -29,7 +29,39 @@ button:active { transform: scale(.97); }
 }
 .toast { animation: toastin .18s ease both; }
 
+/* Loading placeholders. Sized to match the real rows so the layout doesn't jump. */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.shimmer {
+  background-image: linear-gradient(90deg, #1B1D29 25%, #2A2D3E 37%, #1B1D29 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Keyboard users could previously tab through the whole app with no visible focus. */
+:focus-visible {
+  outline: 2px solid #8B7CF6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+}
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+  @apply rounded-lg bg-stage px-3 py-2 text-sm font-semibold text-ink;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fadeup, .toast { animation: none; }
+  .shimmer { animation: none; }
   button:active { transform: none; }
+  html { scroll-behavior: auto; }
 }

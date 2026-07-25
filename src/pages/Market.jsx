@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmt, dayChange } from '../lib/supabase'
 import Sparkline from '../components/Sparkline'
 import HowStrip from '../components/HowStrip'
 import PulseBar from '../components/PulseBar'
+import { SkeletonRows, ErrorState } from '../components/States'
 import { useSession } from '../App'
 
 function RequestArtist({ session }) {
@@ -52,11 +53,14 @@ export default function Market() {
   const [pred, setPred] = useState(null)
   const [pickId, setPickId] = useState('')
   const [predMsg, setPredMsg] = useState(null)
+  const [err, setErr] = useState(null)
 
-  useEffect(() => {
-    async function load() {
-      const { data: artists } = await supabase
+  const load = useCallback(async () => {
+      const { data: artists, error: aErr } = await supabase
         .from('artists').select('id,name,genre,image_url,symbol,metrics_verified').eq('is_active', true)
+      // A failed fetch used to fall through to setRows([]), which rendered
+      // "No artists listed yet." — indistinguishable from a genuinely empty market.
+      if (aErr) { setErr(aErr.message || 'Request failed.'); return }
       if (!artists) { setRows([]); return }
       const since = new Date(); since.setDate(since.getDate() - 2)
       const { data: ticks } = await supabase
@@ -80,16 +84,19 @@ export default function Market() {
         const gap = latest && fv[a.id] ? ((fv[a.id] - latest) / latest) * 100 : null
         return { ...a, pct, latest, gap, spark: series.slice(-40).map(t => Number(t.price)) }
       }).filter(r => r.latest != null))
+      setErr(null)
       supabase.rpc('recent_activity').then(({ data }) => setActivity(data || []))
       supabase.from('market_posts').select('title,body').order('id', { ascending: false })
         .limit(1).maybeSingle().then(({ data }) => setRecap(data))
       supabase.from('feature_flags').select('enabled').eq('key', 'predictions')
         .maybeSingle().then(({ data }) => setPredEnabled(!!data?.enabled))
-    }
+  }, [])
+
+  useEffect(() => {
     load()
     const iv = setInterval(load, 60_000)
     return () => clearInterval(iv)
-  }, [])
+  }, [load])
 
   useEffect(() => {
     if (!session) { setWatchIds([]); setPred(null); return }
@@ -121,7 +128,17 @@ export default function Market() {
     return out
   }, [rows, q, sort])
 
-  if (rows === null) return <p className="text-fog">Loading market…</p>
+  if (err && rows === null) return (
+    <ErrorState message="Couldn't load the market." onRetry={() => { setErr(null); load() }}>
+      {err}
+    </ErrorState>
+  )
+  if (rows === null) return (
+    <div className="space-y-3">
+      <p className="sr-only">Loading market</p>
+      <SkeletonRows rows={8} />
+    </div>
+  )
   if (!rows.length) return <p className="text-fog">No artists listed yet.</p>
 
   const gainers = [...rows].sort((a, b) => b.pct - a.pct)

@@ -1,17 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase, fmt } from '../lib/supabase'
+import { SkeletonRows, ErrorState } from '../components/States'
 
 export default function Trader() {
   const { username } = useParams()
   const [data, setData] = useState(undefined)
+  const [err, setErr] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     supabase.rpc('get_public_portfolio', { p_username: username })
-      .then(({ data }) => setData(data))
-  }, [username])
+      .then(({ data, error }) => {
+        // Distinguish a real failure from a genuinely private/missing portfolio.
+        if (error) { setErr(error.message || 'Request failed.'); return }
+        setErr(null); setData(data)
+      })
+  }, [username, reloadKey])
 
-  if (data === undefined) return <p className="text-fog">Loading…</p>
+  if (err) return (
+    <ErrorState message="Couldn't load that trader." onRetry={() => { setErr(null); setReloadKey(k => k + 1) }}>
+      {err}
+    </ErrorState>
+  )
+  if (data === undefined) return <SkeletonRows rows={4} />
   if (data === null) return (
     <p className="text-fog">
       This portfolio is private or doesn't exist.{' '}
