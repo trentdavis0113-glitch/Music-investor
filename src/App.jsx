@@ -35,6 +35,21 @@ export default function App() {
   useEffect(() => {
     const ref = new URLSearchParams(window.location.search).get('ref')
     if (ref) localStorage.setItem('greenroom_ref', ref)
+
+    // A failed OAuth attempt comes back as ?error=/#error= on whatever URL Supabase was
+    // configured to return to — not as a rejected promise from signInWithOAuth(), which
+    // only navigates the browser. Without this the user lands on a random page with no
+    // explanation at all. Stash it and send them somewhere that can show it.
+    const q = new URLSearchParams(window.location.search)
+    const h = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const authError =
+      q.get('error_description') || h.get('error_description') ||
+      q.get('error') || h.get('error')
+    if (authError) {
+      sessionStorage.setItem('greenroom_auth_error', authError)
+      window.history.replaceState({}, '', window.location.pathname)
+      navigate('/auth', { replace: true })
+    }
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       setAuthReady(true)
@@ -48,6 +63,18 @@ export default function App() {
 
   useEffect(() => {
     if (!session) { setMeta({ ownsArtist: false, isAdmin: false, streak: 0 }); return }
+
+    // OAuth signups never reach the signup Edge Function, so a ?ref= invite would go
+    // unattributed. claim_referral is one-shot and ignores an already-attributed profile,
+    // so running it for every sign-in is safe. Clearing the key also stops a stale invite
+    // from following a later account on a shared device.
+    const invite = localStorage.getItem('greenroom_ref')
+    if (invite) {
+      supabase.rpc('claim_referral', { p_ref: invite })
+        .then(() => localStorage.removeItem('greenroom_ref'))
+        .catch(() => {})
+    }
+
     Promise.all([
       supabase.from('artists').select('id').eq('claimed_by', session.user.id).limit(1),
       supabase.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle(),

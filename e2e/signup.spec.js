@@ -170,6 +170,46 @@ test('an account created but not signed in tells the tester to sign in, not that
   await expect(page.getByText(/Signup failed/i)).toHaveCount(0)
 })
 
+test('Google button offers an account chooser and is disabled while redirecting', async ({ page }) => {
+  await isolate(page)
+  let authorizeUrl = null
+  // Intercept the redirect to Google's consent screen so the test stays offline.
+  await page.route('**/auth/v1/authorize**', route => {
+    authorizeUrl = route.request().url()
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>google</body></html>' })
+  })
+
+  await page.goto('/auth')
+  const btn = page.getByRole('button', { name: 'Continue with Google' })
+  await expect(btn).toBeEnabled()
+  await btn.click()
+  await page.waitForTimeout(1200)
+
+  expect(authorizeUrl).toContain('provider=google')
+  // Testers commonly have several Google accounts; they must get to choose.
+  expect(decodeURIComponent(authorizeUrl)).toContain('prompt=select_account')
+  // And the post-auth destination must be the portfolio.
+  expect(decodeURIComponent(authorizeUrl)).toContain('/portfolio')
+})
+
+// signInWithOAuth navigates the browser rather than fetching, so a disabled provider
+// never rejects client-side — Supabase bounces the user back with ?error= on whatever
+// URL it was told to return to. This is the path that actually happens in production.
+test('a disabled Google provider is explained in plain language', async ({ page }) => {
+  await isolate(page)
+  await page.goto('/?error=validation_failed&error_description=Unsupported+provider%3A+provider+is+not+enabled')
+
+  await expect(page.getByText('Google sign-in is not switched on yet. Use email for now.')).toBeVisible()
+  await expect(page).toHaveURL(/\/auth$/)
+})
+
+test('any other OAuth failure is surfaced rather than silently swallowed', async ({ page }) => {
+  await isolate(page)
+  await page.goto('/portfolio#error=access_denied&error_description=The+user+denied+the+request')
+
+  await expect(page.getByText('The user denied the request')).toBeVisible()
+})
+
 test('the signup page does not scroll sideways', async ({ page }) => {
   await gotoSignup(page)
   const overflow = await page.evaluate(() =>
