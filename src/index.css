@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { @apply bg-ink text-paper font-body antialiased; }
+.num { @apply font-mono tabular-nums; }
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track { animation: marquee 45s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+}
+
+button { transition: transform .08s ease, opacity .15s ease, background-color .15s ease; }
+button:active { transform: scale(.97); }
+
+@keyframes fadeup {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fadeup { animation: fadeup .22s ease both; }
+
+@keyframes toastin {
+  from { opacity: 0; transform: translateY(10px) scale(.97); }
+  to { opacity: 1; transform: none; }
+}
+.toast { animation: toastin .18s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeup, .toast { animation: none; }
+  button:active { transform: none; }
+}
