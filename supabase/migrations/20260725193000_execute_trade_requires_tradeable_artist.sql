@@ -1,0 +1,12 @@
+-- execute_trade took the most recent price tick for an artist with no bound on how old
+-- it was, and no check that the artist was still listed. A delisted artist whose last
+-- tick was three weeks stale could still be bought, at that stale price, by calling the
+-- RPC directly -- 12 of 62 artists were in exactly that state.
+--
+-- The RPC is the security boundary; the UI hiding the button is not a control. It now
+-- enforces the same definition of "tradeable" that market_overview() offers to the
+-- client (is_active), plus a staleness bound so that a stalled tick job halts trading
+-- instead of freezing everyone at a price that no longer moves. Ticks land every 15
+-- minutes, so a 24 hour bound never fires in normal operation.
+--
+-- Applied to production as migration `execute_trade_requires_tradeable_artist`.

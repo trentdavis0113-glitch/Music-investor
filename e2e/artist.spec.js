@@ -369,6 +369,22 @@ test.describe('the trade workflow', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Purchased' })).toHaveCount(0)
   })
 
+  // The server refuses a delisted artist and a price that has stopped updating. Those
+  // are reachable by calling the RPC directly, so the page has to explain them rather
+  // than show raw SQL text.
+  for (const [raw, shown] of [
+    ['Artist is not trading', 'This artist is no longer trading, so the position can’t be changed.'],
+    ['Stale market price for this artist', 'This artist’s price hasn’t updated recently, so trading is paused until it does.'],
+    ['Rate limit: max 20 trades per minute', 'That’s a lot of trades in a short time. Wait a moment and try again.'],
+  ]) {
+    test(`explains "${raw}" in plain language`, async ({ page }) => {
+      const s = server({ tradeError: raw })
+      await open(page, s)
+      await trade(page).getByRole('button', { name: /^Buy 10 shares/ }).click()
+      await expect(page.getByRole('alert')).toContainText(shown)
+    })
+  }
+
   test('signed-out visitors are invited to sign in, not shown a trade form', async ({ page }) => {
     const s = server()
     await open(page, s, { signedIn: false })

@@ -794,6 +794,8 @@ function friendlyTrade(msg = '') {
   if (/Rate limit/i.test(msg)) return 'That’s a lot of trades in a short time. Wait a moment and try again.'
   if (/No active season/i.test(msg)) return 'The season is being set up. Trading resumes shortly.'
   if (/No market price/i.test(msg)) return 'There’s no current price for this artist, so trading is unavailable.'
+  if (/not trading/i.test(msg)) return 'This artist is no longer trading, so the position can’t be changed.'
+  if (/Stale market price/i.test(msg)) return 'This artist’s price hasn’t updated recently, so trading is paused until it does.'
   if (/Not authenticated|JWT|token/i.test(msg)) return 'Your session expired. Sign in again to trade.'
   return msg
 }
