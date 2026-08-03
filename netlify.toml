@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Absolute og:/twitter: URLs are baked in at build time (see vite.config.js), so the
+# canonical origin has to be known to the build rather than inferred at runtime.
+[build.environment]
+  SITE_URL = "https://signal-chain-studio.netlify.app"
+
+# Routing is client-side, so any path that isn't a real file has to be served index.html
+# or a deep link like /chain/adele 404s on a hard refresh. public/_redirects says the same
+# thing for hosts that read it instead of this file; keeping both means the site deploys
+# correctly whether or not netlify.toml is picked up.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# The catalog is static and content-hashed, so the assets are safe to cache forever.
+# index.html deliberately isn't, or a deploy wouldn't reach anyone holding a stale copy.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
