@@ -1,17 +1,24 @@
 import { Link } from 'react-router-dom'
+import { CHAINS } from '../data/chains'
 
-/** Previously any unknown URL rendered an empty <main> with no explanation. */
-export default function NotFound() {
+export default function NotFound({ what = 'page' }) {
   return (
-    <div className="mx-auto max-w-sm space-y-4 py-10 text-center">
-      <p className="font-display text-5xl font-extrabold text-stage">404</p>
-      <p className="font-display text-xl font-extrabold">Nothing trades here.</p>
+    <div className="mx-auto max-w-md space-y-5 py-16 text-center">
+      <p className="font-display text-3xl font-extrabold tracking-tight">No signal.</p>
       <p className="text-sm text-fog">
-        That page doesn’t exist. It may have been an old artist link.
+        That {what} isn't here. The catalog has {CHAINS.length} chains — try one of these.
       </p>
-      <Link to="/" className="inline-block rounded-lg bg-stage px-4 py-2 text-sm font-semibold text-ink">
-        Back to market
-      </Link>
+      <ul className="flex flex-wrap justify-center gap-2">
+        {CHAINS.slice(0, 6).map(c => (
+          <li key={c.slug}>
+            <Link to={`/chain/${c.slug}`}
+              className="chip pressable border border-edge bg-raised text-fog hover:border-edge2 hover:text-paper">
+              {c.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <Link to="/" className="btn-primary inline-flex">All chains</Link>
     </div>
   )
 }

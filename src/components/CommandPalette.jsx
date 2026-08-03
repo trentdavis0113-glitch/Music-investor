@@ -1,35 +1,33 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMarket } from '../lib/market'
-import { fmt } from '../lib/supabase'
-import { getRecent } from '../lib/recent'
+import { CHAINS } from '../data/chains'
+import { PLUGINS } from '../data/plugins'
 
 /**
- * Universal search and quick actions.
+ * Universal search. Opens on Cmd/Ctrl+K or "/" from anywhere.
  *
- * Opens on Cmd/Ctrl+K or "/" from anywhere. Artist search runs against the shared market
- * store already in memory, so results are instant and cost no network. The body only
- * mounts while open, so the store is not subscribed — and therefore not polling — when
- * the palette is closed.
+ * The whole catalog is already in memory — it is a static import — so search is a filter
+ * over an array and costs nothing. Engineers are searchable as well as artists, because
+ * "what does Tom Elmhirst do" is at least as common a question as "what does Adele sound
+ * like", and the credits are where the answer lives.
  *
  * Implements the ARIA combobox-with-listbox pattern: the input keeps focus and owns
- * aria-activedescendant while the list is navigated, which is what screen readers expect
- * and what lets a keyboard user type and steer at the same time.
+ * aria-activedescendant while the list is navigated, which is what lets a keyboard user
+ * type and steer at the same time.
  */
 
 const ACTIONS = [
-  { id: 'act-market', label: 'Market', hint: 'All artists', to: '/', keywords: 'home browse artists' },
-  { id: 'act-portfolio', label: 'Portfolio', hint: 'Your positions', to: '/portfolio', keywords: 'holdings cash positions me' },
-  { id: 'act-leaderboard', label: 'Leaderboard', hint: 'Season ranks', to: '/leaderboard', keywords: 'ranks rankings top traders' },
-  { id: 'act-how', label: 'How it works', hint: 'Rules & pricing', to: '/how-it-works', keywords: 'help rules explain fair value' },
-  { id: 'act-artists', label: 'For artists', hint: 'Claim your profile', to: '/for-artists', keywords: 'claim musician verify' },
-  { id: 'act-terms', label: 'Terms & privacy', hint: 'What we store', to: '/terms', keywords: 'legal privacy simulated' },
+  { id: 'act-chains', label: 'All chains', hint: 'Browse the catalog', to: '/', keywords: 'home library artists browse' },
+  { id: 'act-plugins', label: 'Plugin index', hint: 'What shows up most', to: '/plugins', keywords: 'gear tools waves uad soundtoys' },
+  { id: 'act-rack', label: 'My rack', hint: 'What you own', to: '/rack', keywords: 'inventory own buy owned' },
+  { id: 'act-compare', label: 'Compare chains', hint: 'Two side by side', to: '/compare', keywords: 'versus diff side' },
+  { id: 'act-learn', label: 'Learn', hint: 'Stage order & glossary', to: '/learn', keywords: 'glossary terms help order eq compression' },
+  { id: 'act-about', label: 'About & sources', hint: 'How this is sourced', to: '/about', keywords: 'sources methodology confidence legal' },
 ]
 
 function score(needle, hay) {
   if (!hay) return -1
-  const h = hay.toLowerCase()
-  const i = h.indexOf(needle)
+  const i = String(hay).toLowerCase().indexOf(needle)
   if (i === -1) return -1
   return i === 0 ? 2 : 1 // prefix beats substring
 }
@@ -40,7 +38,6 @@ export default function CommandPalette({ open, onClose }) {
 }
 
 function Palette({ onClose }) {
-  const { rows } = useMarket()
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef(null)
@@ -60,50 +57,57 @@ function Palette({ onClose }) {
     }
   }, [])
 
-  const recent = useMemo(() => getRecent(), [])
-
   const items = useMemo(() => {
-    const needle = q.trim().toLowerCase().replace(/^\$/, '')
+    const needle = q.trim().toLowerCase()
 
     if (!needle) {
-      const rec = recent.map(r => ({
-        kind: 'artist', id: `r-${r.id}`, to: `/artist/${r.id}`,
-        label: r.name, hint: `$${r.symbol}`, group: 'Recently viewed',
-      }))
-      const acts = ACTIONS.map(a => ({ kind: 'action', ...a, group: 'Go to' }))
-      // Without recents (a first visit) lead with the biggest movers, so the palette
-      // teaches what the product is about instead of showing an empty box.
-      const movers = (rows || [])
-        .slice()
-        .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
-        .slice(0, 5)
-        .map(a => ({
-          kind: 'artist', id: `m-${a.id}`, to: `/artist/${a.id}`,
-          label: a.name, hint: `$${a.symbol}`, pct: a.pct, price: a.latest,
-          group: "Today's movers",
-        }))
-      return rec.length ? [...rec, ...acts] : [...movers, ...acts]
+      return [
+        ...CHAINS.slice(0, 5).map(c => ({
+          kind: 'chain', id: `c-${c.slug}`, to: `/chain/${c.slug}`,
+          label: c.name, hint: c.credits[0]?.name, group: 'Chains',
+        })),
+        ...ACTIONS.map(a => ({ kind: 'action', ...a, group: 'Go to' })),
+      ]
     }
 
-    const artists = (rows || [])
-      .map(a => {
-        const s = Math.max(score(needle, a.name), score(needle, a.symbol), score(needle, a.genre))
-        return s < 0 ? null : { s, a }
+    const chains = CHAINS
+      .map(c => {
+        const s = Math.max(
+          score(needle, c.name),
+          score(needle, c.tagline),
+          ...c.genres.map(g => score(needle, g)),
+          ...c.credits.map(cr => score(needle, cr.name)),
+          ...c.records.map(r => score(needle, r)),
+        )
+        return s < 0 ? null : { s, c }
       })
       .filter(Boolean)
-      .sort((x, y) => y.s - x.s || Math.abs(y.a.pct) - Math.abs(x.a.pct))
-      .slice(0, 8)
-      .map(({ a }) => ({
-        kind: 'artist', id: `a-${a.id}`, to: `/artist/${a.id}`,
-        label: a.name, hint: `$${a.symbol}`, pct: a.pct, price: a.latest, group: 'Artists',
+      .sort((x, y) => y.s - x.s || x.c.name.localeCompare(y.c.name))
+      .slice(0, 6)
+      .map(({ c }) => ({
+        kind: 'chain', id: `c-${c.slug}`, to: `/chain/${c.slug}`,
+        label: c.name, hint: c.credits[0]?.name, group: 'Chains',
+      }))
+
+    const plugins = Object.entries(PLUGINS)
+      .map(([id, p]) => {
+        const s = Math.max(score(needle, p.name), score(needle, p.maker))
+        return s < 0 ? null : { s, id, p }
+      })
+      .filter(Boolean)
+      .sort((x, y) => y.s - x.s || x.p.name.localeCompare(y.p.name))
+      .slice(0, 6)
+      .map(({ id, p }) => ({
+        kind: 'plugin', id: `p-${id}`, to: `/plugins?item=${encodeURIComponent(id)}`,
+        label: `${p.maker} ${p.name}`, hint: p.tier, group: 'Plugins',
       }))
 
     const acts = ACTIONS
       .filter(a => score(needle, a.label) >= 0 || score(needle, a.keywords) >= 0)
       .map(a => ({ kind: 'action', ...a, group: 'Go to' }))
 
-    return [...artists, ...acts]
-  }, [q, rows, recent])
+    return [...chains, ...plugins, ...acts]
+  }, [q])
 
   useEffect(() => { setActive(0) }, [q])
 
@@ -124,18 +128,18 @@ function Palette({ onClose }) {
 
   // Keep the highlighted row in view when steering with the keyboard.
   useEffect(() => {
-    const el = listRef.current?.querySelector('[data-active="true"]')
-    el?.scrollIntoView({ block: 'nearest' })
+    listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [active])
 
   let lastGroup = null
+  const icon = { chain: '♪', plugin: '▤', action: '→' }
 
   return (
     <div
       className="animate-veilIn fixed inset-0 z-50 bg-ink/70 backdrop-blur-sm"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div
-        role="dialog" aria-modal="true" aria-label="Search and commands"
+        role="dialog" aria-modal="true" aria-label="Search"
         className="animate-scaleIn mx-auto mt-[12vh] w-[min(94vw,40rem)] overflow-hidden rounded-sheet border border-edge2 bg-panel shadow-e3">
         <div className="flex items-center gap-3 border-b border-edge px-4">
           <span aria-hidden="true" className="text-fog">⌕</span>
@@ -149,21 +153,17 @@ function Palette({ onClose }) {
             aria-controls="cmdk-list"
             aria-activedescendant={items[active]?.id}
             aria-autocomplete="list"
-            aria-label="Search artists or jump to a page"
-            placeholder="Search artists, or jump to…"
+            aria-label="Search artists, engineers and plugins"
+            placeholder="Artist, engineer, record or plugin…"
             className="w-full bg-transparent py-4 text-[15px] outline-none placeholder:text-mute"
           />
-          <kbd className="hidden shrink-0 rounded border border-edge px-1.5 py-0.5 text-[10px] text-mute sm:block">
-            ESC
-          </kbd>
+          <kbd className="hidden shrink-0 rounded border border-edge px-1.5 py-0.5 text-[10px] text-mute sm:block">ESC</kbd>
         </div>
 
         <div id="cmdk-list" role="listbox" aria-label="Results" ref={listRef}
           className="max-h-[min(60vh,26rem)] overflow-y-auto p-2">
           {items.length === 0 && (
-            <p className="px-3 py-8 text-center text-sm text-fog">
-              Nothing matches “{q}”.
-            </p>
+            <p className="px-3 py-8 text-center text-sm text-fog">Nothing matches “{q}”.</p>
           )}
 
           {items.map((item, i) => {
@@ -185,26 +185,14 @@ function Palette({ onClose }) {
                   onMouseMove={() => setActive(i)}
                   onClick={() => choose(item)}
                   className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 ${
-                    isActive ? 'bg-stage/15 text-paper' : 'text-fog'}`}>
+                    isActive ? 'bg-amber/15 text-paper' : 'text-fog'}`}>
                   <span aria-hidden="true"
                     className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs ${
-                      item.kind === 'artist' ? 'bg-stage/20 text-stage' : 'bg-edge text-fog'}`}>
-                    {item.kind === 'artist' ? '♪' : '→'}
+                      item.kind === 'action' ? 'bg-edge text-fog' : 'bg-amber/20 text-amber'}`}>
+                    {icon[item.kind]}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-paper">
-                    {item.label}
-                  </span>
-                  {item.pct != null && (
-                    <span className={`num text-xs ${item.pct >= 0 ? 'text-gain' : 'text-loss'}`}>
-                      {item.pct >= 0 ? '+' : ''}{item.pct.toFixed(2)}%
-                    </span>
-                  )}
-                  {item.price != null && (
-                    <span className="num text-xs text-fog">${fmt(item.price)}</span>
-                  )}
-                  {item.pct == null && item.hint && (
-                    <span className="truncate text-xs text-mute">{item.hint}</span>
-                  )}
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-paper">{item.label}</span>
+                  {item.hint && <span className="truncate text-xs text-mute">{item.hint}</span>}
                 </div>
               </div>
             )

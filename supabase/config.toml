@@ -1,8 +1,0 @@
-project_id = "uajheoltstvftdmnigaw"
-
-[functions.signup]
-# Must stay false. Supabase's built-in verify_jwt only understands the legacy JWT-based
-# anon key; the app authenticates with a publishable (sb_publishable_*) key, which the
-# gateway rejects as "Invalid JWT" when verify_jwt is on. The function authorizes the
-# apikey header in its own code instead.
-verify_jwt = false

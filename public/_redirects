@@ -1,1 +1,4 @@
-/* /index.html 200
+# Routing is client-side, so any path that isn't a real file has to be served index.html or
+# a deep link like /chain/adele 404s on a hard refresh. Read by Netlify and Cloudflare
+# Pages; other hosts need the equivalent rewrite configured on their side.
+/*  /index.html  200

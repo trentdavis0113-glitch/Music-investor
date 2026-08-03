@@ -1,9 +1,0 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
-
-# Absolute og:/twitter: URLs are baked in at build time (see vite.config.js). Pinned here
-# so the Netlify deploy keeps emitting its own domain while it is still the live site.
-# Delete this file once Cloudflare is the canonical host.
-[build.environment]
-  SITE_URL = "https://greenroom-exchange-app.netlify.app"
