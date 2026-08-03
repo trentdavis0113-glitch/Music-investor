@@ -2,8 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // Absolute URLs are required in og:/twitter: tags, so the canonical origin is baked in at
-// build time. Set SITE_URL in the host's build environment when the domain changes.
-const SITE_URL = (process.env.SITE_URL || 'https://signalchain.pages.dev').replace(/\/$/, '')
+// build time. netlify.toml sets SITE_URL for the hosted build; the fallback keeps a bare
+// local `npm run build` emitting the right origin too, rather than a placeholder that
+// would ship if the site were ever deployed from a prebuilt dist/.
+const SITE_URL = (process.env.SITE_URL || 'https://signal-chain-studio.netlify.app').replace(/\/$/, '')
 
 export default defineConfig({
   plugins: [
